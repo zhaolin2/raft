@@ -80,7 +80,7 @@ func (rf *Raft) candidateRequestVote(voteCount *int, args *RequestVoteArgs, once
 		}
 
 		if rf.currentTerm != args.Term {
-			rf.info(dWarn, "当前任期已跟传入任期不同,投票作废 (S%d currentTerm:%d requestTerm:{})", rf.me, rf.currentTerm, args.Term)
+			rf.info(dWarn, "当前任期已跟传入任期不同,投票作废 (S%d currentTerm:%d requestTerm:%d)", rf.me, rf.currentTerm, args.Term)
 		}
 
 		rf.checkTerm(reply.Term, server)
@@ -118,7 +118,7 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	rf.info(dVote, "接收到请求, voteFrom:S%d,term:T%d", args.CandidateId, args.Term)
 
 	if rf.currentTerm > args.Term {
-		rf.info(dVote, "拒绝投票,当前任期更高 (T%d > Td%)", rf.currentTerm, args.Term)
+		rf.info(dVote, "拒绝投票,当前任期更高 (T%d > T%d)", rf.currentTerm, args.Term)
 		reply.Term = rf.currentTerm
 		return
 	}
@@ -130,13 +130,14 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 
 	if rf.votedFor == -1 || rf.votedFor == args.CandidateId {
 		if term < args.LastLogTerm || (term == args.LastLogTerm && index <= args.LastLogIndex) {
-			rf.info(dVote, "开始投票,投票给 S%d at T%d", args.CandidateId, args.Term)
+			rf.info(dVote, "开始投票,投票给 S%d at T%d ", args.CandidateId, args.Term)
+			rf.info(dLog2, "打印判断条件, (T%d < T%d || (T%d==T%d && %d <= %d))", term, args.LastLogTerm, term, args.LastLogTerm, index, args.LastLogIndex)
 			reply.VoteGranted = true
 			rf.votedFor = args.CandidateId
 			rf.resetElectionTimeOut()
 			return
 		}
-		rf.info(dVote, "当前投票不符合条件,不进行投票,(args.index: %d,args.ter: %d)", args.LastLogIndex, args.LastLogTerm)
+		rf.info(dVote, "当前投票不符合条件,不进行投票,(args.index: %d,args.term: %d)", args.LastLogIndex, args.LastLogTerm)
 
 	}
 	rf.info(dVote, "已投票,拒绝投票")

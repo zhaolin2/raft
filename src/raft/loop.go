@@ -42,7 +42,7 @@ func (rf *Raft) applyLogsLoop() {
 				Command:      rf.log.getEntry(rf.lastApplied).Command,
 				CommandIndex: rf.lastApplied,
 			})
-			rf.info(dLog2, "apply日志到自己的状态机 lastApplied:%d,rf.commitIndex:%d", rf.lastApplied, rf.commitIndex)
+			rf.info(dLog2, "apply日志到自己的状态机 lastApplied:%d,rf.commitIndex:%d command:%v", rf.lastApplied, rf.commitIndex, rf.log.getEntry(rf.lastApplied).Command)
 		}
 		rf.mu.Unlock()
 		for _, msg := range appliedMsgs {

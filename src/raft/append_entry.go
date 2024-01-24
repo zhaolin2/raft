@@ -40,9 +40,9 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 	if len(args.Entries) == 0 {
-		rf.info(dLog2, "接收到心跳 <- S%d", args.LeaderId)
+		rf.info(dLog2, "接收到心跳 S%d <- S%d", rf.me, args.LeaderId)
 	} else {
-		rf.info(dLog2, "接收到日志 S%d <- S%d Received append entries at T%d.", rf.me, args.LeaderId, rf.currentTerm)
+		rf.info(dLog2, "接收到日志 S%d <- S%d Received append entries at T%d. entries:%v", rf.me, args.LeaderId, rf.currentTerm, args.Entries)
 	}
 	reply.Success = false
 
@@ -64,7 +64,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	rf.leaderId = args.LeaderId
 
 	//5.2实现
-	if args.PrevLogTerm == -1 && args.PrevLogTerm != rf.log.getEntry(args.PrevLogIndex).Term {
+	if args.PrevLogTerm == -1 || args.PrevLogTerm != rf.log.getEntry(args.PrevLogIndex).Term {
 		rf.info(dLog2, "检查上一条日志的term失败,需要leader重试")
 		return
 	}
@@ -104,7 +104,7 @@ func (rf *Raft) sendEntries(isHeartbeat bool) {
 		if lastLogIndex >= nextIndex {
 			// If last log index ≥ nextIndex for a follower:
 			args.Entries = rf.getSlice(nextIndex, lastLogIndex+1)
-			rf.info(dLog, "发送日志请求, -> S%d,[PreLogIndex:%d,PreLogTerm:%d,LeaderCommit:%d,logs:%v]", peer,
+			rf.info(dLog, "发送日志请求, S%d -> S%d,[PreLogIndex:%d,PreLogTerm:%d,LeaderCommit:%d,logs:%v]", rf.me, peer,
 				args.PrevLogIndex, args.PrevLogTerm, args.LeaderCommit, args.Entries)
 			//Debug(dLog, "S%d -> S%d Sending append entries at T%d. PLI: %d, PLT: %d, LC: %d. Entries: %v.",
 			//	rf.me, peer, rf.currentTerm, args.PrevLogIndex,
@@ -113,7 +113,7 @@ func (rf *Raft) sendEntries(isHeartbeat bool) {
 			go rf.leaderSendEntries(args, peer)
 		} else if isHeartbeat {
 			args.Entries = make([]LogEntry, 0)
-			rf.info(dLog, "发送心跳请求 -> S%d", peer)
+			rf.info(dLog, "发送心跳请求 S%d -> S%d", rf.me, peer)
 			go rf.leaderSendEntries(args, peer)
 		}
 	}
@@ -139,7 +139,7 @@ func (rf *Raft) leaderSendEntries(args *AppendEntriesArgs, server int) {
 		}
 		// If successful: update nextIndex and matchIndex for follower (§5.3)
 		if reply.Success {
-			rf.info(dLog, "接收日志成功 <- S%d", server)
+			rf.info(dLog, "接收日志成功 S%d <- S%d", rf.me, server)
 			newNext := args.PrevLogIndex + 1 + len(args.Entries)
 			newMatch := args.PrevLogIndex + len(args.Entries)
 			rf.nextIndex[server] = maxInt(newNext, rf.nextIndex[server])

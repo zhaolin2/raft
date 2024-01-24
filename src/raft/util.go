@@ -65,9 +65,11 @@ func (rf *Raft) info(topic logTopic, format string, a ...interface{}) {
 		//lastLogIndex, lastLogTerm := rf.log.lastLogInfo()
 
 		prefix := fmt.Sprintf("%06d %v [S%d T%d commitIndex:%d,ApplyIndex:%d] ", microseconds, string(topic), rf.me, rf.currentTerm, rf.commitIndex, rf.lastApplied)
-
 		format = prefix + format
 		log.Printf(format, a...)
+		//if rf.state == LeaderState {
+		//	log.Printf("[S%d]打印nextIndex %v", rf.me, rf.nextIndex)
+		//}
 	}
 }
 
