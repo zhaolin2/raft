@@ -1,6 +1,9 @@
 package raft
 
-import "log"
+import (
+	"log"
+	"math"
+)
 
 func (rf *Raft) getSlice(startIndex, endIndex int) []LogEntry {
 	logEntries := rf.log
@@ -22,4 +25,25 @@ func (rf *Raft) getSlice(startIndex, endIndex int) []LogEntry {
 		log.Panicf("LogEntries.getSlice: startIndex > endIndex. (%d > %d)", startIndex, endIndex)
 	}
 	return append([]LogEntry(nil), logEntries[logStartIndex-1:logEndIndex-1]...)
+}
+
+func (rf *Raft) getBoundsWithTerm(term int) (minIndex int, maxIndex int) {
+	if term == 0 {
+		return 0, 0
+	}
+	minIndex = math.MaxInt
+	maxIndex = -1
+
+	entries := rf.log
+	for i := 1; i <= len(entries); i++ {
+		if entries.getEntry(i).Term == term {
+			minIndex = Min(minIndex, i)
+			maxIndex = Max(maxIndex, i)
+		}
+	}
+
+	if maxIndex == -1 {
+		return -1, -1
+	}
+	return
 }

@@ -45,6 +45,7 @@ func (rf *Raft) raiseElection() {
 	rf.currentTerm++
 	rf.info(dTerm, "开始新的任期")
 	rf.votedFor = rf.me
+	rf.persist()
 	rf.resetElectionTimeOut()
 
 	args := rf.tryBuilderRequestVote()
@@ -134,6 +135,7 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 			rf.info(dLog2, "打印判断条件, (T%d < T%d || (T%d==T%d && %d <= %d))", term, args.LastLogTerm, term, args.LastLogTerm, index, args.LastLogIndex)
 			reply.VoteGranted = true
 			rf.votedFor = args.CandidateId
+			rf.persist()
 			rf.resetElectionTimeOut()
 			return
 		}

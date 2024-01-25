@@ -121,12 +121,21 @@ func (rf *Raft) persist() {
 	// data := w.Bytes()
 	// rf.persister.SaveRaftState(data)
 
+	rf.info(dPersist, "开始持久化, T%d", rf.currentTerm)
+
 	buffer := new(bytes.Buffer)
 	encoder := labgob.NewEncoder(buffer)
-	encoder.Encode(rf.currentTerm)
-
-	bytes := buffer.Bytes()
-	rf.persister.SaveRaftState(bytes)
+	if err := encoder.Encode(rf.currentTerm); err != nil {
+		Debug(dError, "Raft.readPersist: failed to decode \"rf.currentTerm\". err: %v, data: %v", err, rf.currentTerm)
+	}
+	if err := encoder.Encode(rf.votedFor); err != nil {
+		Debug(dError, "Raft.readPersist: failed to decode \"rf.votedFor\". err: %v, data: %v", err, rf.votedFor)
+	}
+	if err := encoder.Encode(rf.log); err != nil {
+		Debug(dError, "Raft.readPersist: failed to decode \"rf.log\". err: %v, data: %v", err, rf.log)
+	}
+	data := buffer.Bytes()
+	rf.persister.SaveRaftState(data)
 }
 
 // restore previously persisted state.
@@ -148,9 +157,21 @@ func (rf *Raft) readPersist(data []byte) {
 	//   rf.yyy = yyy
 	// }
 
-	buffer := bytes.NewBuffer(data)
-	decoder := labgob.NewDecoder(buffer)
-	decoder.Decode(&rf.currentTerm)
+	rf.info(dPersist, "开始反序列化")
+	// Your code here (2C).
+	r := bytes.NewBuffer(data)
+	d := labgob.NewDecoder(r)
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
+	if err := d.Decode(&rf.currentTerm); err != nil {
+		Debug(dError, "Raft.readPersist: failed to decode \"rf.currentTerm\". err: %v, data: %s", err, data)
+	}
+	if err := d.Decode(&rf.votedFor); err != nil {
+		Debug(dError, "Raft.readPersist: failed to decode \"rf.votedFor\". err: %v, data: %s", err, data)
+	}
+	if err := d.Decode(&rf.log); err != nil {
+		Debug(dError, "Raft.readPersist: failed to decode \"rf.log\". err: %v, data: %s", err, data)
+	}
 }
 
 // A service wants to switch to snapshot.  Only do so if Raft hasn't
@@ -234,6 +255,7 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 	}
 	rf.log = append(rf.log, logEntry)
 	rf.info(dLog, "接收到command,command:%v", command)
+	rf.persist()
 	rf.sendEntries(false)
 
 	return len(rf.log), rf.currentTerm, true
@@ -283,11 +305,14 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.lastApplied = 0
 	rf.nextIndex = make([]int, len(rf.peers))
 	rf.matchIndex = make([]int, len(rf.peers))
+	rf.leaderId = -1
+	rf.applyCh = applyCh
+
+	rf.readPersist(persister.ReadRaftState())
+
 	for peer := range rf.peers {
 		rf.nextIndex[peer] = 1
 	}
-	rf.applyCh = applyCh
-	rf.leaderId = -1
 
 	rf.setElectionTimeout(randHeartbeatTimeout())
 	//rf.resetHeartBeatTimeOut()
@@ -368,6 +393,7 @@ func (rf *Raft) checkTerm(term int, server int) bool {
 		rf.currentTerm = term
 		rf.votedFor = -1
 		rf.leaderId = -1
+		rf.persist()
 		return true
 	}
 	return false

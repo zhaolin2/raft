@@ -29,6 +29,11 @@ func (rf *Raft) tryBuildAppendEntriesArgs(peer int) *AppendEntriesArgs {
 type AppendEntriesReply struct {
 	Term    int  // currentTerm, for leader to update itself
 	Success bool // true if follower contained entry matching prevLogIndex and prevLogTerm
+
+	XTerm  int // term in the conflicting entry (if any)
+	XIndex int // index of first entry with that term (if any)
+	XLen   int // log length
+
 }
 
 func (rf *Raft) sendAppendEntries(server int, args *AppendEntriesArgs, reply *AppendEntriesReply) bool {
@@ -66,6 +71,9 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	//5.2实现
 	if args.PrevLogTerm == -1 || args.PrevLogTerm != rf.log.getEntry(args.PrevLogIndex).Term {
 		rf.info(dLog2, "检查上一条日志的term失败,需要leader重试")
+		reply.XLen = len(rf.log)
+		reply.XTerm = rf.log.getEntry(args.PrevLogIndex).Term
+		reply.XIndex, _ = rf.getBoundsWithTerm(reply.XTerm)
 		return
 	}
 
@@ -78,6 +86,9 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	}
 
 	rf.info(dLog2, "增加日志成功,logs:%v", args.Entries)
+	if len(rf.log) > 0 {
+		rf.persist()
+	}
 
 	if args.LeaderCommit > rf.commitIndex {
 		rf.info(dCommit, "leader的commit更高 (%d > %d)", args.LeaderCommit, rf.commitIndex)
@@ -166,9 +177,25 @@ func (rf *Raft) leaderSendEntries(args *AppendEntriesArgs, server int) {
 		}
 
 		// If AppendEntries fails because of log inconsistency: decrement nextIndex and retry (§5.3)
-		if rf.nextIndex[server] > 1 {
-			rf.nextIndex[server]--
+
+		//更新节点对应的nextIndex
+		//一个一个回退对应的nextIndex
+		//if rf.nextIndex[server] > 1 {
+		//	rf.nextIndex[server]--
+		//}
+		if reply.XTerm == -1 {
+			rf.nextIndex[server] = reply.XLen + 1
+		} else {
+			_, maxIndex := rf.getBoundsWithTerm(reply.XTerm)
+			if maxIndex != -1 {
+				// leader has XTerm
+				rf.nextIndex[server] = maxIndex
+			} else {
+				// leader doesn't have XTerm
+				rf.nextIndex[server] = reply.XIndex
+			}
 		}
+
 		lastLogIndex, _ := rf.log.lastLogInfo()
 		nextIndex := rf.nextIndex[server]
 		if lastLogIndex >= nextIndex {
